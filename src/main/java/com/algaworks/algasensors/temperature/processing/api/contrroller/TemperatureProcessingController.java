@@ -2,8 +2,12 @@ package com.algaworks.algasensors.temperature.processing.api.contrroller;
 
 import com.algaworks.algasensors.temperature.processing.api.model.TemperatureLog;
 import com.algaworks.algasensors.temperature.processing.common.IdGenerator;
+import com.algaworks.algasensors.temperature.processing.infrastructure.rabbitmq.RabbitMQConfiguration;
 import io.hypersistence.tsid.TSID;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.core.MessagePostProcessor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,9 +21,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.OffsetDateTime;
 
 @Slf4j
+@RequiredArgsConstructor
 @RequestMapping("/api/sensors/{sensorId}/temperatures/data")
 @RestController
 public class TemperatureProcessingController {
+
+    private final RabbitTemplate rabbitTemplate;
 
     @ResponseStatus(HttpStatus.OK)
     @PostMapping(consumes = MediaType.TEXT_PLAIN_VALUE)
@@ -45,5 +52,12 @@ public class TemperatureProcessingController {
                                                     .build();
 
         log.info(temperatureLog.toString());
+
+        MessagePostProcessor messagePostProcessor = message -> {
+            message.getMessageProperties().setHeader("TSID", temperatureLog.getSensorId().toString());
+            return message;
+        };
+
+        rabbitTemplate.convertAndSend(RabbitMQConfiguration.FANOUT_EXCHANGE, "", temperatureLog, messagePostProcessor);
     }
 }
